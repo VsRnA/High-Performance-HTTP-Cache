@@ -1,0 +1,7 @@
+# Бинарные файлы
+/bin/
+/dist/
+
+# IDE
+.vscode/
+.idea/
