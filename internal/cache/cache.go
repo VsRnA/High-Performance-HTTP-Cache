@@ -2,14 +2,24 @@ package cache
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 )
+
+type Stats struct {
+	Hits	int64 `json:"hits"`
+	Misses	int64	`json:"misses"`
+	Keys	int64	`json:"keys"`
+	Evictions	int64	`json:"evictions"`
+}
 
 type Cache interface {
 	Get(key string) (string, bool)
 	Set(key string, value string)
 	SetWithTTL(key string, value string, ttl time.Duration)
 	Delete(key string) bool
+	Stats() Stats
+	Clear()
 }
 
 type CacheItem struct {
@@ -24,6 +34,10 @@ func (item *CacheItem) IsExpired() bool {
 type SimpleCache struct {
 	data map[string]*CacheItem
 	mu   sync.RWMutex
+
+	hits	int64
+	misses	int64
+	evictions  int64
 }
 
 func New() Cache {
@@ -42,6 +56,7 @@ func (c *SimpleCache) Get(key string) (string, bool) {
 	c.mu.RUnlock()
 
 	if !exists {
+		atomic.AddInt64(&c.misses, 1)
 		return "", false
 	}
 
@@ -56,9 +71,11 @@ func (c *SimpleCache) Get(key string) (string, bool) {
 	}
 
 	if !exists || item.IsExpired() {
+		atomic.AddInt64(&c.misses, 1)
 		return "", false
 	}
 
+	atomic.AddInt64(&c.hits, 1)
 	return item.Value, true
 }
 
@@ -107,9 +124,39 @@ func (c *SimpleCache) removeExpired() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	
+	expired := 0
 	for key, item := range c.data {
 		if item.IsExpired() {
 			delete(c.data, key)
+			expired++
 		}
 	}
+
+	if expired > 0 {
+		atomic.AddInt64(&c.evictions, int64(expired))
+	}
+}
+
+func (c *SimpleCache) Stats() Stats {
+	c.mu.RLock()
+	keys := int64(len(c.data))
+	c.mu.RUnlock()
+	
+	return Stats{
+		Hits:      atomic.LoadInt64(&c.hits),
+		Misses:    atomic.LoadInt64(&c.misses),
+		Keys:      keys,
+		Evictions: atomic.LoadInt64(&c.evictions),
+	}
+}
+
+func (c *SimpleCache) Clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	
+	c.data = make(map[string]*CacheItem)
+
+	atomic.StoreInt64(&c.hits, 0)
+	atomic.StoreInt64(&c.misses, 0)
+	atomic.StoreInt64(&c.evictions, 0)
 }

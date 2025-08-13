@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -60,6 +61,22 @@ func main() {
 		default:
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
+	})
+
+	// Статистика и управление
+	http.HandleFunc("/stats", func(w http.ResponseWriter, r *http.Request) {
+		stats := cacheEngine.Stats()
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(stats)
+	})
+
+	http.HandleFunc("/clear", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		cacheEngine.Clear()
+		fmt.Fprint(w, "Cache cleared")
 	})
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
