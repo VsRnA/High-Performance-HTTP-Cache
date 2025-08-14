@@ -1,4 +1,4 @@
-# go-cache
+# High-Performance-HTTP-Cache
 
 Высокопроизводительная библиотека кэширования для Go с поддержкой различных стратегий eviction и TTL.
 
